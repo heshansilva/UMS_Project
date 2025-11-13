@@ -84,3 +84,27 @@ export const processPayment = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// @desc    Delete a payment
+// @route   DELETE /api/payments/:id
+// @access  Admin
+export const deletePayment = async (req, res) => {
+  try {
+    const pool = await getConnection();
+    
+    // The trg_HandleDeletePayment trigger will automatically
+    // update the Bill status and OutstandingBalance.
+    await pool.request()
+      .input("PaymentID", sql.Int, req.params.id)
+      .query("DELETE FROM Payment WHERE PaymentID = @PaymentID");
+
+    res.status(200).json({ message: "Payment deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting payment:", error.message);
+    // Handle potential foreign key issues if trigger fails
+    if (error.number === 547) {
+      return res.status(400).json({ message: "Error deleting payment. Related records might be locked." });
+    }
+    res.status(500).json({ message: "Server error" });
+  }
+};
