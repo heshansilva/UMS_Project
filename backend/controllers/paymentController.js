@@ -4,19 +4,35 @@ import { getConnection } from "../config/dbConfig.js";
 // @desc    Get all payments
 // @route   GET /api/payments
 // @access  Public
+// @desc    Get all payments (Restricted by UtilityType for Staff)
 export const getAllPayments = async (req, res) => {
   try {
     const pool = await getConnection();
-    const result = await pool.request().query(`
+    const request = pool.request();
+
+    // We join Bill -> Meter -> UtilityType to filter by ID
+    let query = `
       SELECT 
         p.*,
         c.FirstName + ' ' + c.LastName AS CustomerName,
-        b.TotalAmount AS BillAmount
+        b.TotalAmount AS BillAmount,
+        ut.UtilityName
       FROM Payment p
       JOIN Customer c ON p.CustomerID = c.CustomerID
       JOIN Bill b ON p.BillID = b.BillID
-      ORDER BY p.PaymentDate DESC
-    `);
+      JOIN Meter m ON b.MeterID = m.MeterID
+      JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
+    `;
+
+    // RESTRICTION: Filter by Staff Utility
+    if (req.user && req.user.UtilityTypeID) {
+      query += ` WHERE m.UtilityTypeID = @UserUtilityID`;
+      request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
+    }
+
+    query += ` ORDER BY p.PaymentDate DESC`;
+
+    const result = await request.query(query);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error("Error getting all payments:", error.message);

@@ -1,11 +1,14 @@
 import sql from "mssql";
 import { getConnection } from "../config/dbConfig.js";
 
-// @desc    Get all bills
+// @desc    Get all bills (Restricted by UtilityType)
+// @route   GET /api/bills
 export const getAllBills = async (req, res) => {
   try {
     const pool = await getConnection();
-    const result = await pool.request().query(`
+    const request = pool.request();
+    
+    let query = `
       SELECT 
         b.*, 
         c.FirstName + ' ' + c.LastName AS CustomerName,
@@ -15,8 +18,16 @@ export const getAllBills = async (req, res) => {
       JOIN Customer c ON b.CustomerID = c.CustomerID
       JOIN Meter m ON b.MeterID = m.MeterID
       JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
-      ORDER BY b.GeneratedDate DESC
-    `);
+    `;
+
+    if (req.user && req.user.UtilityTypeID) {
+      query += ` WHERE m.UtilityTypeID = @UserUtilityID`;
+      request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
+    }
+
+    query += ` ORDER BY b.GeneratedDate DESC`;
+
+    const result = await request.query(query);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error("Error getting all bills:", error.message);
@@ -24,30 +35,38 @@ export const getAllBills = async (req, res) => {
   }
 };
 
-// @desc    Get a single bill by ID
+// @desc    Get single bill by ID (Restricted)
+// @route   GET /api/bills/:id
 export const getBillById = async (req, res) => {
   try {
     const pool = await getConnection();
-    const result = await pool.request()
-      .input("BillID", sql.Int, req.params.id)
-      .query(`
-        SELECT 
-          b.*, 
-          c.FirstName + ' ' + c.LastName AS CustomerName,
-          c.Address, c.ContactNumber,
-          m.MeterNumber,
-          ut.UtilityName, ut.Unit,
-          r.CurrentReading, r.PreviousReading
-        FROM Bill b
-        JOIN Customer c ON b.CustomerID = c.CustomerID
-        JOIN Meter m ON b.MeterID = m.MeterID
-        JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
-        LEFT JOIN MeterReading r ON b.ReadingID = r.ReadingID
-        WHERE b.BillID = @BillID
-      `);
+    const request = pool.request();
+
+    let query = `
+      SELECT 
+        b.*, 
+        c.FirstName + ' ' + c.LastName AS CustomerName,
+        c.Address,
+        m.MeterNumber,
+        ut.UtilityName,
+        ut.Unit
+      FROM Bill b
+      JOIN Customer c ON b.CustomerID = c.CustomerID
+      JOIN Meter m ON b.MeterID = m.MeterID
+      JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
+      WHERE b.BillID = @BillID
+    `;
+
+    if (req.user && req.user.UtilityTypeID) {
+      query += ` AND m.UtilityTypeID = @UserUtilityID`;
+      request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
+    }
+
+    request.input("BillID", sql.Int, req.params.id);
+    const result = await request.query(query);
 
     if (result.recordset.length === 0) {
-      return res.status(404).json({ message: "Bill not found" });
+      return res.status(404).json({ message: "Bill not found or access denied" });
     }
     res.status(200).json(result.recordset[0]);
   } catch (error) {
@@ -56,24 +75,43 @@ export const getBillById = async (req, res) => {
   }
 };
 
-// @desc    Get all bills for a specific customer
+// @desc    Get bills for a specific customer (Restricted)
+// @route   GET /api/bills/customer/:customerId
 export const getBillsByCustomer = async (req, res) => {
+  
   try {
     const pool = await getConnection();
     const request = pool.request();
+
+    let query = `
+      SELECT 
+        b.BillID, ut.UtilityName, m.MeterNumber, 
+        b.BillingPeriodStart, b.BillingPeriodEnd, 
+        b.Consumption, b.TotalAmount, b.BillStatus, b.DueDate
+      FROM Bill b
+      JOIN Meter m ON b.MeterID = m.MeterID
+      JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
+      WHERE b.CustomerID = @CustomerID
+    `;
+
+    if (req.user && req.user.UtilityTypeID) {
+      query += ` AND m.UtilityTypeID = @UserUtilityID`;
+      request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
+    }
+
+    query += ` ORDER BY b.GeneratedDate DESC`;
     request.input("CustomerID", sql.Int, req.params.customerId);
 
-    // Call your stored procedure
-    const result = await request.execute("sp_GetCustomerBillHistory");
-    
+    const result = await request.query(query);
     res.status(200).json(result.recordset);
   } catch (error) {
-    console.error("Error getting customer bill history:", error.message);
+    console.error("Error getting customer bills:", error.message);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// @desc    Generate a new bill
+// @desc    Generate a new bill (Restricted)
+// @route   POST /api/bills/generate
 export const generateBill = async (req, res) => {
   const { MeterID, ReadingID } = req.body;
 
@@ -83,66 +121,77 @@ export const generateBill = async (req, res) => {
 
   try {
     const pool = await getConnection();
-    const request = pool.request();
-    request.input("MeterID", sql.Int, MeterID);
-    request.input("ReadingID", sql.Int, ReadingID);
+    
+    // SECURITY CHECK
+    if (req.user && req.user.UtilityTypeID) {
+      const checkMeter = await pool.request()
+        .input("CheckMeterID", sql.Int, MeterID)
+        .query("SELECT UtilityTypeID FROM Meter WHERE MeterID = @CheckMeterID");
+      
+      if (checkMeter.recordset.length === 0) return res.status(404).json({ message: "Meter not found" });
 
-    // Call your stored procedure
-    // We added the transaction to this SP in our previous discussion
-    const result = await request.execute("sp_GenerateBill");
-
-    if (result.recordset[0].ErrorMessage) {
-        // Handle errors returned from the CATCH block
-        return res.status(500).json({ message: result.recordset[0].ErrorMessage });
+      if (checkMeter.recordset[0].UtilityTypeID !== req.user.UtilityTypeID) {
+         return res.status(403).json({ message: "Unauthorized: You cannot generate bills for this utility type." });
+      }
     }
 
-    res.status(201).json(result.recordset[0]);
+    const result = await pool.request()
+      .input("MeterID", sql.Int, MeterID)
+      .input("ReadingID", sql.Int, ReadingID)
+      .execute("sp_GenerateBill");
+
+    res.status(201).json({ 
+      message: "Bill generated successfully", 
+      billID: result.recordset[0].BillID 
+    });
   } catch (error) {
     console.error("Error generating bill:", error.message);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-// @desc    Run the batch job to update overdue bills
+// @desc    Update overdue status
+// @route   PUT /api/bills/update-status
 export const updateOverdueStatus = async (req, res) => {
   try {
     const pool = await getConnection();
-    const request = pool.request();
-    
-    // Call your stored procedure
-    const result = await request.execute("sp_UpdateOverdueBills");
-
-    res.status(200).json({ 
-        message: "Overdue bill statuses updated successfully",
-        updatedBills: result.recordset[0].UpdatedBills 
-    });
+    const result = await pool.request().execute("sp_UpdateOverdueBills");
+    res.status(200).json({ message: "Overdue status updated", affected: result.rowsAffected[0] });
   } catch (error) {
-    console.error("Error updating overdue bills:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("Error updating overdue status:", error.message);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
+// @desc    Get readings that haven't been billed yet (Restricted)
+// @route   GET /api/bills/unbilled-readings
 export const getUnbilledReadings = async (req, res) => {
   try {
     const pool = await getConnection();
-    const result = await pool.request().query(`
+    const request = pool.request();
+
+    let query = `
       SELECT 
-        mr.ReadingID, 
-        mr.MeterID, 
-        m.MeterNumber, 
+        mr.ReadingID, mr.ReadingDate, mr.CurrentReading, mr.Consumption,
+        m.MeterID, m.MeterNumber, 
         c.FirstName + ' ' + c.LastName AS CustomerName,
-        mr.ReadingDate,
-        mr.Consumption,
-        ut.Unit
+        ut.UtilityName
       FROM MeterReading mr
       JOIN Meter m ON mr.MeterID = m.MeterID
       JOIN Customer c ON m.CustomerID = c.CustomerID
       JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
-      WHERE mr.ReadingID NOT IN (
-        SELECT ReadingID FROM Bill WHERE ReadingID IS NOT NULL
-      )
-      ORDER BY mr.ReadingDate DESC
-    `);
+      LEFT JOIN Bill b ON mr.ReadingID = b.ReadingID
+      WHERE b.BillID IS NULL
+    `;
+
+    if (req.user && req.user.UtilityTypeID) {
+      query += ` AND m.UtilityTypeID = @UserUtilityID`;
+      request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
+    }
+
+    query += ` ORDER BY mr.ReadingDate DESC`;
+
+    const result = await request.query(query);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error("Error getting unbilled readings:", error.message);
@@ -150,26 +199,43 @@ export const getUnbilledReadings = async (req, res) => {
   }
 };
 
-// @desc    Get all unpaid bills
-export const getUnpaidBills = async (req, res) => { // <-- MAKE SURE 'export' IS HERE
+// @desc    Get unpaid bills (Restricted)
+// @route   GET /api/bills/unpaid
+export const getUnpaidBills = async (req, res) => {
   try {
     const pool = await getConnection();
-    const result = await pool.request().query(`
+    const request = pool.request();
+
+    let query = `
       SELECT 
         b.BillID,
         b.TotalAmount,
         (b.TotalAmount - ISNULL(SUM(p.AmountPaid), 0)) AS RemainingBalance,
         c.FirstName + ' ' + c.LastName AS CustomerName,
-        m.MeterNumber
+        m.MeterNumber,
+        ut.UtilityName,
+        b.DueDate,
+        b.BillStatus
       FROM Bill b
       JOIN Customer c ON b.CustomerID = c.CustomerID
       JOIN Meter m ON b.MeterID = m.MeterID
+      JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
       LEFT JOIN Payment p ON b.BillID = p.BillID
       WHERE b.BillStatus IN ('Pending', 'Partial', 'Overdue')
-      GROUP BY b.BillID, b.TotalAmount, c.FirstName, c.LastName, m.MeterNumber, b.BillStatus
+    `;
+
+    if (req.user && req.user.UtilityTypeID) {
+      query += ` AND m.UtilityTypeID = @UserUtilityID`;
+      request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
+    }
+
+    query += `
+      GROUP BY b.BillID, b.TotalAmount, c.FirstName, c.LastName, m.MeterNumber, b.BillStatus, ut.UtilityName, b.DueDate
       HAVING (b.TotalAmount - ISNULL(SUM(p.AmountPaid), 0)) > 0
       ORDER BY b.BillID DESC
-    `);
+    `;
+
+    const result = await request.query(query);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error("Error getting unpaid bills:", error.message);

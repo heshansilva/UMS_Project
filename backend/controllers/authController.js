@@ -1,13 +1,149 @@
 import sql from "mssql";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getConnection } from "../config/dbConfig.js";
 
-// Helper function to generate a token
-const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
+// Helper: Generate Token
+const generateToken = (id, role, utilityTypeID = null) => {
+  return jwt.sign({ id, role, UtilityTypeID: utilityTypeID }, process.env.JWT_SECRET, {
     expiresIn: "1d",
   });
+};
+
+// @desc    Unified Login (Staff + Customer) with DEBUGGING
+// @route   POST /api/auth/login
+export const authUser = async (req, res) => {
+  const { username, password } = req.body;
+  
+  // 1. Sanitize Inputs (Remove spaces, handle missing values)
+  const rawUser = username || req.body.Username || "";
+  const rawPass = password || req.body.Password || "";
+  
+  const userIn = rawUser.trim(); // Removes hidden spaces like "tikiri "
+  const passIn = rawPass.trim();
+
+  console.log(`\n--- LOGIN ATTEMPT ---`);
+  console.log(`User Input: "${userIn}"`);
+  console.log(`Pass Input: "${passIn}"`);
+
+  if (!userIn || !passIn) {
+    console.log("Fail: Empty username or password");
+    return res.status(400).json({ message: "Please provide username and password" });
+  }
+
+  try {
+    const pool = await getConnection();
+    
+    // ---------------------------------------------------------
+    // 2. CHECK STAFF (Users Table)
+    // ---------------------------------------------------------
+    console.log("Checking Users table...");
+    const staffResult = await pool.request()
+      .input("Username", sql.VarChar(100), userIn)
+      .query(`
+        SELECT U.UserID, U.Username, U.PasswordHash, U.UtilityTypeID, U.IsActive, R.RoleName
+        FROM Users U
+        JOIN Roles R ON U.RoleID = R.RoleID
+        WHERE U.Username = @Username
+      `);
+
+    const staffUser = staffResult.recordset[0];
+
+    if (staffUser) {
+      console.log(`Found Staff: ${staffUser.Username} (Role: ${staffUser.RoleName})`);
+      
+      if (!staffUser.IsActive) {
+         console.log("Fail: Staff account inactive");
+         return res.status(401).json({ message: "Account disabled" });
+      }
+
+      let isMatch = await bcrypt.compare(passIn, staffUser.PasswordHash);
+      if (!isMatch && passIn === staffUser.PasswordHash) isMatch = true; 
+
+      if (isMatch) {
+        console.log("Success: Staff Logged In");
+        return res.json({
+          _id: staffUser.UserID,
+          username: staffUser.Username,
+          role: staffUser.RoleName,
+          UtilityTypeID: staffUser.UtilityTypeID,
+          token: generateToken(staffUser.UserID, staffUser.RoleName, staffUser.UtilityTypeID),
+        });
+      } else {
+        console.log("Fail: Staff Password Incorrect");
+        return res.status(401).json({ message: "Invalid password" });
+      }
+    }
+
+    // ---------------------------------------------------------
+    // 3. CHECK CUSTOMER (Customer Table)
+    // ---------------------------------------------------------
+    console.log("User not found in Staff. Checking Customer table...");
+
+    // Check global password first
+    if (passIn === "cus123") {
+      // Using LOWER() to make it case-insensitive (e.g., "Tikiri" == "tikiri")
+      const customerResult = await pool.request()
+        .input("FirstName", sql.VarChar(100), userIn)
+        .query(`
+            SELECT * FROM Customer 
+            WHERE LOWER(FirstName) = LOWER(@FirstName) 
+            AND IsActive = 1
+        `);
+
+      const customer = customerResult.recordset[0];
+
+      if (customer) {
+        console.log(`Success: Found Customer "${customer.FirstName} ${customer.LastName}"`);
+        return res.json({
+          _id: customer.CustomerID,
+          name: customer.FirstName + ' ' + customer.LastName,
+          email: customer.Email,
+          role: 'Customer',
+          token: generateToken(customer.CustomerID, 'Customer'),
+        });
+      } else {
+        console.log(`Fail: No Active Customer found with First Name "${userIn}"`);
+      }
+    } else {
+        console.log(`Fail: Password "${passIn}" is not the global customer password.`);
+    }
+
+    // 4. FAIL
+    return res.status(401).json({ message: "User not found or invalid credentials" });
+
+  } catch (error) {
+    console.error("Login Error:", error.message);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// @desc    Customer Specific Login (Optional, kept for safety)
+// @route   POST /api/auth/customer/login
+export const loginCustomer = async (req, res) => {
+  // Same logic as above part 2, useful if you have a separate login page later
+  const { Username, Password } = req.body; 
+  if (Password !== "cus123") return res.status(401).json({ message: "Invalid password" });
+
+  try {
+    const pool = await getConnection();
+    const result = await pool.request()
+      .input("FirstName", sql.VarChar(100), Username)
+      .query("SELECT * FROM Customer WHERE FirstName = @FirstName AND IsActive = 1");
+
+    const customer = result.recordset[0];
+    if (!customer) return res.status(401).json({ message: "Customer not found" });
+
+    res.json({
+        _id: customer.CustomerID,
+        name: customer.FirstName + ' ' + customer.LastName,
+        email: customer.Email,
+        role: 'Customer',
+        token: generateToken(customer.CustomerID, 'Customer'),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 // @desc    Register a new user

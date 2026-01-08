@@ -4,11 +4,13 @@ import { getConnection } from "../config/dbConfig.js";
 // @desc    Get all meters
 // @route   GET /api/meters
 // @access  Public
+// @desc    Get all meters (Restricted by UtilityType for Staff)
 export const getAllMeters = async (req, res) => {
   try {
     const pool = await getConnection();
-    // Join with Customer and UtilityType to get meaningful names
-    const result = await pool.request().query(`
+    const request = pool.request();
+    
+    let query = `
       SELECT 
         m.*, 
         c.FirstName + ' ' + c.LastName AS CustomerName,
@@ -17,7 +19,16 @@ export const getAllMeters = async (req, res) => {
       FROM Meter m
       JOIN Customer c ON m.CustomerID = c.CustomerID
       JOIN UtilityType ut ON m.UtilityTypeID = ut.UtilityTypeID
-    `);
+    `;
+
+    // RESTRICTION LOGIC:
+    // If the user has a specific UtilityTypeID, filter the results.
+    if (req.user.UtilityTypeID) {
+      query += ` WHERE m.UtilityTypeID = @UserUtilityID`;
+      request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
+    }
+
+    const result = await request.query(query);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error("Error getting all meters:", error.message);
@@ -58,9 +69,9 @@ export const getMeterById = async (req, res) => {
   }
 };
 
-// @desc    Insert a new meter reading
+// @desc    Insert a new meter reading (Restricted by UtilityType)
 // @route   POST /api/meters/reading
-// @access  Public
+// @access  Protected (Meter Readers)
 export const addNewReading = async (req, res) => {
   const { MeterID, ReadingDate, CurrentReading, ReadingTakenBy, Notes } = req.body;
 
@@ -71,8 +82,23 @@ export const addNewReading = async (req, res) => {
   try {
     const pool = await getConnection();
     
+    // SECURITY CHECK: 
+    // Verify that this Meter belongs to the User's Utility Type
+    if (req.user && req.user.UtilityTypeID) {
+      const checkMeter = await pool.request()
+        .input("CheckMeterID", sql.Int, MeterID)
+        .query("SELECT UtilityTypeID FROM Meter WHERE MeterID = @CheckMeterID");
+      
+      if (checkMeter.recordset.length === 0) {
+         return res.status(404).json({ message: "Meter not found" });
+      }
+
+      if (checkMeter.recordset[0].UtilityTypeID !== req.user.UtilityTypeID) {
+         return res.status(403).json({ message: "You are not authorized to add readings for this utility type." });
+      }
+    }
+
     // 1. Get the *actual* previous reading from the database
-    // We don't trust the user to send this.
     const lastReadingResult = await pool.request()
       .input("MeterID", sql.Int, MeterID)
       .query(`
@@ -88,20 +114,19 @@ export const addNewReading = async (req, res) => {
     } else {
       // If no readings, get InitialReading from Meter table
       const meterResult = await pool.request()
-        .input("MeterID", sql.Int, MeterID)
-        .query("SELECT InitialReading FROM Meter WHERE MeterID = @MeterID");
+        .input("MeterID_Init", sql.Int, MeterID) // Changed param name to avoid conflict
+        .query("SELECT InitialReading FROM Meter WHERE MeterID = @MeterID_Init");
       if (meterResult.recordset.length > 0) {
         previousReading = meterResult.recordset[0].InitialReading;
       }
     }
 
     // 2. Insert the new reading.
-    // Your 'trg_CalculateConsumption' INSTEAD OF INSERT trigger will handle this.
     await pool.request()
       .input("MeterID", sql.Int, MeterID)
       .input("ReadingDate", sql.Date, ReadingDate)
       .input("CurrentReading", sql.Decimal(10, 2), CurrentReading)
-      .input("PreviousReading", sql.Decimal(10, 2), previousReading) // Send the correct previous reading
+      .input("PreviousReading", sql.Decimal(10, 2), previousReading)
       .input("ReadingTakenBy", sql.VarChar(100), ReadingTakenBy)
       .input("Notes", sql.VarChar(500), Notes)
       .query(`
@@ -112,7 +137,6 @@ export const addNewReading = async (req, res) => {
     res.status(201).json({ message: "Meter reading added successfully. Consumption calculated by trigger." });
   } catch (error) {
     console.error("Error adding meter reading:", error.message);
-    // Handle CHECK constraint violation (e.g., CurrentReading < PreviousReading)
     if (error.number === 547) { 
       return res.status(400).json({ message: "Error: Current reading cannot be less than the previous reading." });
     }
@@ -152,6 +176,7 @@ export const getUtilityTypes = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 // @desc    Get all meters for a specific customer
 // @route   GET /api/meters/customer/:id
 // @access  Protected

@@ -18,12 +18,13 @@ export const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       // 3. Get user from DB (excluding password)
-      // We do this to attach the user's info to the request
       const pool = await getConnection();
+      
+      // UPDATED QUERY: We now select U.UtilityTypeID
       const result = await pool.request()
         .input("UserID", sql.Int, decoded.id)
         .query(`
-          SELECT U.UserID, U.Username, R.RoleName
+          SELECT U.UserID, U.Username, U.UtilityTypeID, R.RoleName
           FROM Users U
           JOIN Roles R ON U.RoleID = R.RoleID
           WHERE U.UserID = @UserID

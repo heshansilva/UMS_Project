@@ -8,32 +8,16 @@ import {
   getUnbilledReadings,
   getUnpaidBills,
 } from "../controllers/billController.js";
+import { protect } from "../middleware/authMiddleware.js"; // <--- THIS IS CRITICAL
 
 const router = express.Router();
 
-
-
-// POST /api/bills/generate
-router.post("/generate", generateBill);
-
-// PUT /api/bills/update-status
-router.put("/update-status", updateOverdueStatus);
-
-// GET /api/bills/unbilled-readings
-router.get("/unbilled-readings", getUnbilledReadings);
-
-// GET /api/bills/unpaid
-router.get("/unpaid", getUnpaidBills);
-
-// GET /api/bills/customer/:customerId
-router.get("/customer/:customerId", getBillsByCustomer);
-
-
-
-// GET /api/bills
-router.get("/", getAllBills);
-
-// GET /api/bills/:id
-router.get("/:id", getBillById);
+router.post("/generate", protect, generateBill);
+router.put("/update-status", protect, updateOverdueStatus);
+router.get("/unbilled-readings", protect, getUnbilledReadings);
+router.get("/unpaid", protect, getUnpaidBills);
+router.get("/customer/:customerId", protect, getBillsByCustomer);
+router.get("/", protect, getAllBills);
+router.get("/:id", protect, getBillById);
 
 export default router;

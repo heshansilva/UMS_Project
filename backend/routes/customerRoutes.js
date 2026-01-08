@@ -1,30 +1,60 @@
 import express from "express";
 import {
+  createCustomer,
   getAllCustomers,
   getCustomerById,
-  createNewCustomer,
   updateCustomer,
   deleteCustomer,
-  getCustomerTypes,
 } from "../controllers/customerController.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { authorize } from "../middleware/authorize.js"; 
+import { authorize } from "../middleware/authorize.js";
 
 const router = express.Router();
 
-// 2. Define our roles
-const isAdmin = authorize('Admin');
-const isClerkOrAdmin = authorize('Admin', 'BillingClerk', 'Manager');
-router.get("/types", protect, isClerkOrAdmin, getCustomerTypes);
+// 1. VIEW CUSTOMERS (GET /)
+// REMOVED "BillingClerk" -> Now they cannot even see the list.
+// Allowed: Admin, Manager, FieldOfficer
+router.get(
+  "/",
+  protect,
+  authorize("Admin", "Manager", "FieldOfficer"),
+  getAllCustomers
+);
 
-// 3. Apply the roles
-router.route("/")
-  .get(protect, isClerkOrAdmin, getAllCustomers) // Clerks can see all customers
-  .post(protect, isAdmin, createNewCustomer); // Only Admin can create
+// 2. VIEW SINGLE CUSTOMER (GET /:id)
+// REMOVED "BillingClerk"
+router.get(
+  "/:id",
+  protect,
+  authorize("Admin", "Manager", "FieldOfficer"),
+  getCustomerById
+);
 
-router.route("/:id")
-  .get(protect, isClerkOrAdmin, getCustomerById) // Clerks can see one customer
-  .put(protect, isAdmin, updateCustomer) // Only Admin can update
-  .delete(protect, isAdmin, deleteCustomer); // Only Admin can delete
+// 3. ADD CUSTOMER (POST /)
+// Allowed: Admin, Manager
+router.post(
+  "/",
+  protect,
+  authorize("Admin", "Manager"), 
+  createCustomer
+);
+
+// 4. UPDATE CUSTOMER (PUT /:id)
+// Allowed: Admin, Manager
+router.put(
+  "/:id",
+  protect,
+  authorize("Admin", "Manager"),
+  updateCustomer
+);
+
+// 5. DELETE CUSTOMER (DELETE /:id)
+// Allowed: Admin only
+router.delete(
+  "/:id",
+  protect,
+  authorize("Admin"),
+  deleteCustomer
+);
 
 export default router;

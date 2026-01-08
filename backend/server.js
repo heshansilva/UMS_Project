@@ -8,6 +8,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import tariffRoutes from "./routes/tariffRoutes.js";
+import complaintRoutes from "./routes/complaintRoutes.js";
 
 dotenv.config();
 const app = express();
@@ -23,6 +24,7 @@ app.use("/api/bills", billRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes); 
 app.use("/api/tariffs", tariffRoutes);
+app.use("/api/complaints", complaintRoutes);
 
 // Default
 app.get("/", (_, res) => res.send("Utility System Management API Running"));
