@@ -41,7 +41,7 @@ export function TopConsumersChart({ data }: ChartProps) {
         <Legend />
         <Bar
           dataKey="TotalConsumption"
-          fill="hsl(var(--secondary))" // Your secondary green
+          fill="#22c55e" // Your secondary green
           radius={[4, 4, 0, 0]}
           name="Total Consumption"
         />
