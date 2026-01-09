@@ -73,8 +73,11 @@ export const createCustomer = async (req, res) => {
     UtilityTypeID, MeterNumber, InitialReading 
   } = req.body;
 
-  // Basic Validation
-  if (!CustomerTypeID || !FirstName || !LastName || !NIC || !ContactNumber || !Address || !UtilityTypeID || !MeterNumber) {
+  // 1. Set Default Customer Type if not provided (Default to 1 - e.g., Residential)
+  const finalCustomerTypeID = CustomerTypeID || 1;
+
+  // 2. Updated Validation (Removed CustomerTypeID from the check)
+  if (!FirstName || !LastName || !NIC || !ContactNumber || !Address || !UtilityTypeID || !MeterNumber) {
     return res.status(400).json({ message: "Please fill in all required fields" });
   }
 
@@ -90,7 +93,7 @@ export const createCustomer = async (req, res) => {
 
     // Use the Stored Procedure 'sp_AddNewCustomer'
     const result = await pool.request()
-      .input("CustomerTypeID", sql.Int, CustomerTypeID)
+      .input("CustomerTypeID", sql.Int, finalCustomerTypeID) // Uses the default or provided ID
       .input("FirstName", sql.VarChar(100), FirstName)
       .input("LastName", sql.VarChar(100), LastName)
       .input("NIC", sql.VarChar(20), NIC)
