@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* This is the default "light" theme (which we won't use) */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 222 47% 11%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 222 47% 11%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 222 47% 11%;
+    --radius: 0.5rem;
+  }
+
+  /* THIS IS YOUR "DARK PRO THEME" */
+  html.dark {
+    --background: 0 0% 4%; /* #0b0c10 */
+    --foreground: 210 2% 77%; /* #c5c6c7 */
+
+    --card: 210 13% 16%; /* #1f2833 */
+    --card-foreground: 210 2% 77%; /* #c5c6c7 */
+
+    --popover: 210 13% 16%; /* #1f2833 */
+    --popover-foreground: 210 2% 77%; /* #c5c6c7 */
+
+    --primary: 175 98% 70%; /* #66fcf1 - Main Accent */
+    --primary-foreground: 222 47% 11%; /* #0b0c10 - Text on accent buttons */
+
+    --secondary: 175 40% 50%; /* #4f9a94 - Graph bars */
+    --secondary-foreground: 210 2% 77%; /* #c5c6c7 */
+
+    --muted: 210 13% 16%; /* #1f2833 */
+    --muted-foreground: 215 5% 51%; /* #7c8187 - Placeholder text */
+
+    --accent: 175 98% 70%; /* #66fcf1 */
+    --accent-foreground: 222 47% 11%; /* #0b0c10 */
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 210 13% 26%; /* #354252 - Lighter border */
+    --input: 210 13% 26%; /* #354252 */
+    --ring: 175 98% 70%; /* #66fcf1 - Focus rings */
+  }
+}
+
+@layer base {
+  * {
+    /* This uses the CSS variable, which is correct */
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
