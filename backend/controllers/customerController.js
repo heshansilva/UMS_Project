@@ -76,7 +76,7 @@ export const createCustomer = async (req, res) => {
   // 1. Set Default Customer Type if not provided (Default to 1 - e.g., Residential)
   const finalCustomerTypeID = CustomerTypeID || 1;
 
-  // 2. Updated Validation (Removed CustomerTypeID from the check)
+  // 2. Validate Required Fields
   if (!FirstName || !LastName || !NIC || !ContactNumber || !Address || !UtilityTypeID || !MeterNumber) {
     return res.status(400).json({ message: "Please fill in all required fields" });
   }
@@ -93,7 +93,7 @@ export const createCustomer = async (req, res) => {
 
     // Use the Stored Procedure 'sp_AddNewCustomer'
     const result = await pool.request()
-      .input("CustomerTypeID", sql.Int, finalCustomerTypeID) // Uses the default or provided ID
+      .input("CustomerTypeID", sql.Int, finalCustomerTypeID)
       .input("FirstName", sql.VarChar(100), FirstName)
       .input("LastName", sql.VarChar(100), LastName)
       .input("NIC", sql.VarChar(20), NIC)
@@ -107,9 +107,18 @@ export const createCustomer = async (req, res) => {
       .input("InitialReading", sql.Decimal(10, 2), InitialReading || 0)
       .execute("sp_AddNewCustomer");
 
+    // --- FIX STARTS HERE ---
+    // Check if the Stored Procedure returned a custom ErrorMessage (e.g., Duplicate Key)
+    if (result.recordset && result.recordset.length > 0 && result.recordset[0].ErrorMessage) {
+       return res.status(400).json({ 
+         message: result.recordset[0].ErrorMessage 
+       });
+    }
+    // --- FIX ENDS HERE ---
+
     res.status(201).json({ 
       message: "Customer created successfully",
-      customerID: result.recordset ? result.recordset[0].CustomerID : null 
+      customerID: result.recordset && result.recordset[0] ? result.recordset[0].CustomerID : null 
     });
 
   } catch (error) {
