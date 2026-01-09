@@ -182,6 +182,15 @@ export const getUtilityTypes = async (req, res) => {
 // @access  Protected
 export const getMetersByCustomer = async (req, res) => {
   try {
+    // --- SECURITY CHECK START ---
+    // If the logged-in user is a Customer, ensure they are requesting THEIR OWN ID.
+    if (req.user.RoleName === 'Customer') {
+      if (parseInt(req.params.id) !== req.user.UserID) {
+        return res.status(403).json({ message: "Access denied. You can only view your own meters." });
+      }
+    }
+    // --- SECURITY CHECK END ---
+
     const pool = await getConnection();
     const result = await pool.request()
       .input("CustomerID", sql.Int, req.params.id)

@@ -42,9 +42,18 @@ export const getAllPayments = async (req, res) => {
 
 // @desc    Get all payments for a specific customer
 // @route   GET /api/payments/customer/:id
-// @access  Public
+// @access  Public (Protected by Token)
 export const getPaymentsByCustomer = async (req, res) => {
   try {
+    // --- SECURITY CHECK START ---
+    // If the user is a Customer, they can ONLY view their own ID
+    if (req.user.RoleName === 'Customer') {
+      if (parseInt(req.params.id) !== req.user.UserID) {
+        return res.status(403).json({ message: "Access denied. You can only view your own payments." });
+      }
+    }
+    // --- SECURITY CHECK END ---
+
     const pool = await getConnection();
     const result = await pool.request()
       .input("CustomerID", sql.Int, req.params.id)

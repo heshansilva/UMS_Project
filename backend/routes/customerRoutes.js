@@ -11,9 +11,9 @@ import { authorize } from "../middleware/authorize.js";
 
 const router = express.Router();
 
-// 1. VIEW CUSTOMERS (GET /)
-// REMOVED "BillingClerk" -> Now they cannot even see the list.
+// 1. VIEW CUSTOMERS LIST (GET /)
 // Allowed: Admin, Manager, FieldOfficer
+// (Customers should NOT see the full list)
 router.get(
   "/",
   protect,
@@ -22,11 +22,11 @@ router.get(
 );
 
 // 2. VIEW SINGLE CUSTOMER (GET /:id)
-// REMOVED "BillingClerk"
+// FIX: Added "Customer" to the list so they can view their own profile
 router.get(
   "/:id",
   protect,
-  authorize("Admin", "Manager", "FieldOfficer"),
+  authorize("Admin", "Manager", "FieldOfficer", "Customer"), 
   getCustomerById
 );
 

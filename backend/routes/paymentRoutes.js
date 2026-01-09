@@ -10,15 +10,17 @@ import { authorize } from "../middleware/authorize.js";
 
 const router = express.Router();
 
-// Define roles
+// Role Definitions
 const isAdmin = authorize('Admin');
 const isClerkOrAdmin = authorize('Admin', 'BillingClerk', 'Manager');
+// NEW: Allow Customers to view history
+const canViewHistory = authorize('Admin', 'BillingClerk', 'Manager', 'Customer');
 
 // A clerk or admin can process a payment
 router.post("/process", protect, isClerkOrAdmin, processPayment);
 
-// A clerk or admin can get payments for a customer
-router.get("/customer/:id", protect, isClerkOrAdmin, getPaymentsByCustomer);
+// Updated: Added 'Customer' role via 'canViewHistory'
+router.get("/customer/:id", protect, canViewHistory, getPaymentsByCustomer);
 
 // A clerk or admin can see all payments
 router.get("/", protect, isClerkOrAdmin, getAllPayments);

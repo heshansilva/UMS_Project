@@ -77,9 +77,19 @@ export const getBillById = async (req, res) => {
 
 // @desc    Get bills for a specific customer (Restricted)
 // @route   GET /api/bills/customer/:customerId
+// @desc    Get bills for a specific customer (Restricted)
+// @route   GET /api/bills/customer/:customerId
 export const getBillsByCustomer = async (req, res) => {
-  
   try {
+    // --- SECURITY CHECK START ---
+    // Place this at the top to fail fast if unauthorized
+    if (req.user.RoleName === 'Customer') {
+      if (parseInt(req.params.customerId) !== req.user.UserID) {
+        return res.status(403).json({ message: "Access denied. You can only view your own bills." });
+      }
+    }
+    // --- SECURITY CHECK END ---
+
     const pool = await getConnection();
     const request = pool.request();
 
@@ -94,7 +104,8 @@ export const getBillsByCustomer = async (req, res) => {
       WHERE b.CustomerID = @CustomerID
     `;
 
-    if (req.user && req.user.UtilityTypeID) {
+    // Restriction for Staff (Managers) to only see their utility type
+    if (req.user.UtilityTypeID) {
       query += ` AND m.UtilityTypeID = @UserUtilityID`;
       request.input("UserUtilityID", sql.Int, req.user.UtilityTypeID);
     }
