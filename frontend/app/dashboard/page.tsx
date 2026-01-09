@@ -68,13 +68,14 @@ export default function Dashboard() {
             description="Total registered users"
             Icon={Users}
           />
+
+            <DashboardCard 
+            title="Active Meters" 
+            value={stats.totalActiveMeters} 
+            description="All utility meters" 
+            Icon={Database}/>
           
-          <DashboardCard
-            title="Total Outstanding"
-            value={formatCurrency(stats.totalOutstanding)}
-            description="Total unpaid amount"
-            Icon={CircleDollarSign}
-          />
+         
           <DashboardCard
             title="Pending Bills"
             value={stats.pendingBills}
@@ -94,42 +95,12 @@ export default function Dashboard() {
             Icon={FileCheck}
           />
 
-          <DashboardCard 
-            title="Total Customers" 
-            value={stats.totalCustomers} 
-            description="Total registered users" 
-            Icon={Users}/>
-
-          <DashboardCard 
-            title="Active Meters" 
-            value={stats.totalActiveMeters} 
-            description="All utility meters" 
-            Icon={Database}/>
-            
-
-          <DashboardCard 
-            title="Total Outstanding" 
-            value={formatCurrency(stats.totalOutstanding)} 
-            description="Total unpaid amount" 
-            Icon={CircleDollarSign}/>
-
-          <DashboardCard 
-            title="Pending Bills" 
-            value={stats.pendingBills} 
-            description="Bills awaiting payment" 
-            Icon={FileWarning}/>
-
-          <DashboardCard 
-            title="Open Complaints" 
-            value={stats.openComplaints} 
-            description="Unresolved issues" 
-            Icon={AlertCircle}/>
-
-          <DashboardCard 
-            title="Monthly Revenue" 
-            value={formatCurrency(stats.monthlyRevenue)} 
-            description="Revenue this month" 
-            Icon={FileCheck}/>
+           <DashboardCard
+            title="Total Outstanding"
+            value={formatCurrency(stats.totalOutstanding)}
+            description="Total unpaid amount"
+            Icon={CircleDollarSign}
+          />
 
         </div>
       ) : (
