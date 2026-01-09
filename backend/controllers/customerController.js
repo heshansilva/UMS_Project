@@ -33,15 +33,25 @@ export const getAllCustomers = async (req, res) => {
 // @desc    Get a single customer by ID (Restricted view)
 // @route   GET /api/customers/:id
 // @access  Protected
+
 export const getCustomerById = async (req, res) => {
   try {
     const pool = await getConnection();
     const request = pool.request();
 
+    // 1. SECURITY CHECK: Customers can ONLY view their own profile
+    if (req.user.role === 'Customer') {
+      // req.user.id comes from the token, req.params.id comes from the URL
+      if (parseInt(req.params.id) !== req.user.id) {
+        return res.status(403).json({ message: "Access denied. You can only view your own profile." });
+      }
+    }
+
     let query = `SELECT * FROM vw_CustomerSummary WHERE CustomerID = @CustomerID`;
     
-    // RESTRICTION:
-    if (req.user && req.user.UtilityTypeID) {
+    // 2. RESTRICTION: Staff (Managers) can only view customers in their Utility Type
+    // We skip this check for Customers (since they don't have a UtilityTypeID in their token usually)
+    if (req.user.role !== 'Customer' && req.user.UtilityTypeID) {
       query = `
         SELECT c.* FROM vw_CustomerSummary c
         JOIN Meter m ON c.CustomerID = m.CustomerID
@@ -54,9 +64,11 @@ export const getCustomerById = async (req, res) => {
     const result = await request.query(query);
 
     if (result.recordset.length === 0) {
-      return res.status(404).json({ message: "Customer not found or not in your utility purview" });
+      return res.status(404).json({ message: "Customer not found or access restricted" });
     }
+    
     res.status(200).json(result.recordset[0]);
+
   } catch (error) {
     console.error("Error getting customer by ID:", error.message);
     res.status(500).json({ message: "Server error" });

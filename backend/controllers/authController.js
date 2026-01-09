@@ -12,22 +12,21 @@ const generateToken = (id, role, utilityTypeID = null) => {
 
 // @desc    Unified Login (Staff + Customer) with DEBUGGING
 // @route   POST /api/auth/login
+// @desc    Unified Login (Staff + Customer) - FIXED KEYS
+// @route   POST /api/auth/login
 export const authUser = async (req, res) => {
+  // Support both lowercase and capitalized inputs
   const { username, password } = req.body;
-  
-  // 1. Sanitize Inputs (Remove spaces, handle missing values)
   const rawUser = username || req.body.Username || "";
   const rawPass = password || req.body.Password || "";
   
-  const userIn = rawUser.trim(); // Removes hidden spaces like "tikiri "
+  const userIn = rawUser.trim();
   const passIn = rawPass.trim();
 
   console.log(`\n--- LOGIN ATTEMPT ---`);
   console.log(`User Input: "${userIn}"`);
-  console.log(`Pass Input: "${passIn}"`);
 
   if (!userIn || !passIn) {
-    console.log("Fail: Empty username or password");
     return res.status(400).json({ message: "Please provide username and password" });
   }
 
@@ -35,9 +34,8 @@ export const authUser = async (req, res) => {
     const pool = await getConnection();
     
     // ---------------------------------------------------------
-    // 2. CHECK STAFF (Users Table)
+    // 1. CHECK STAFF (Users Table)
     // ---------------------------------------------------------
-    console.log("Checking Users table...");
     const staffResult = await pool.request()
       .input("Username", sql.VarChar(100), userIn)
       .query(`
@@ -50,10 +48,7 @@ export const authUser = async (req, res) => {
     const staffUser = staffResult.recordset[0];
 
     if (staffUser) {
-      console.log(`Found Staff: ${staffUser.Username} (Role: ${staffUser.RoleName})`);
-      
       if (!staffUser.IsActive) {
-         console.log("Fail: Staff account inactive");
          return res.status(401).json({ message: "Account disabled" });
       }
 
@@ -61,28 +56,26 @@ export const authUser = async (req, res) => {
       if (!isMatch && passIn === staffUser.PasswordHash) isMatch = true; 
 
       if (isMatch) {
-        console.log("Success: Staff Logged In");
+        console.log(`Success: Staff Logged In (${staffUser.RoleName})`);
+        
+        // --- FIX: Return Capitalized Keys (UserID, Role) to match Frontend ---
         return res.json({
-          _id: staffUser.UserID,
-          username: staffUser.Username,
-          role: staffUser.RoleName,
+          UserID: staffUser.UserID,           // Was _id
+          Username: staffUser.Username,       // Was username
+          Role: staffUser.RoleName,           // Was role
           UtilityTypeID: staffUser.UtilityTypeID,
           token: generateToken(staffUser.UserID, staffUser.RoleName, staffUser.UtilityTypeID),
         });
       } else {
-        console.log("Fail: Staff Password Incorrect");
         return res.status(401).json({ message: "Invalid password" });
       }
     }
 
     // ---------------------------------------------------------
-    // 3. CHECK CUSTOMER (Customer Table)
+    // 2. CHECK CUSTOMER (Customer Table)
     // ---------------------------------------------------------
-    console.log("User not found in Staff. Checking Customer table...");
-
     // Check global password first
     if (passIn === "cus123") {
-      // Using LOWER() to make it case-insensitive (e.g., "Tikiri" == "tikiri")
       const customerResult = await pool.request()
         .input("FirstName", sql.VarChar(100), userIn)
         .query(`
@@ -94,22 +87,20 @@ export const authUser = async (req, res) => {
       const customer = customerResult.recordset[0];
 
       if (customer) {
-        console.log(`Success: Found Customer "${customer.FirstName} ${customer.LastName}"`);
+        console.log(`Success: Customer Logged In (${customer.FirstName})`);
+        
+        // --- FIX: Return Capitalized Keys for Customer too ---
         return res.json({
-          _id: customer.CustomerID,
-          name: customer.FirstName + ' ' + customer.LastName,
-          email: customer.Email,
-          role: 'Customer',
+          UserID: customer.CustomerID,        // Was _id
+          Username: customer.FirstName,       // Was name
+          Role: 'Customer',                   // Was role
           token: generateToken(customer.CustomerID, 'Customer'),
         });
-      } else {
-        console.log(`Fail: No Active Customer found with First Name "${userIn}"`);
       }
-    } else {
-        console.log(`Fail: Password "${passIn}" is not the global customer password.`);
     }
 
-    // 4. FAIL
+    // 3. FAIL
+    console.log("Login Failed: User not found");
     return res.status(401).json({ message: "User not found or invalid credentials" });
 
   } catch (error) {

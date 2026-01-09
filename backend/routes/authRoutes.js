@@ -1,9 +1,11 @@
 import express from "express";
-import { registerUser, loginUser } from "../controllers/authController.js";
+// 1. Change the import to bring in 'authUser'
+import { registerUser, authUser } from "../controllers/authController.js";
 
 const router = express.Router();
 
 router.post("/register", registerUser);
-router.post("/login", loginUser);
+// 2. Change this line to use 'authUser'
+router.post("/login", authUser);
 
 export default router;
